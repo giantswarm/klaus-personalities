@@ -1,0 +1,64 @@
+---
+# yamllint disable rule:truthy
+name: Push Personalities
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: gsoci.azurecr.io
+  REGISTRY_PATH: giantswarm/klaus-personalities
+
+jobs:
+  push:
+    name: Push Personality OCI Artifacts
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.ref_name }}
+      ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install ORAS
+        uses: oras-project/setup-oras@v1
+
+      - name: Login to registry
+        run: |
+          oras login "$REGISTRY" \
+            --username "$ACR_USERNAME" \
+            --password "$ACR_PASSWORD"
+
+      - name: Push personalities
+        run: |
+          set -euo pipefail
+
+          CONFIG_MEDIA_TYPE="application/vnd.giantswarm.klaus-personality.config.v1+json"
+          CONTENT_MEDIA_TYPE="application/vnd.giantswarm.klaus-personality.content.v1.tar+gzip"
+
+          for dir in personalities/*/; do
+            name="$(basename "$dir")"
+            ref="${REGISTRY}/${REGISTRY_PATH}/${name}:${TAG}"
+
+            echo "--- Packaging personality: ${name} ---"
+
+            config_file=$(mktemp)
+            printf '{"name":"%s","version":"%s"}' "$name" "$TAG" > "$config_file"
+
+            content_file=$(mktemp --suffix=.tar.gz)
+            tar -czf "$content_file" -C "$dir" .
+
+            echo "Pushing ${ref}"
+            oras push "$ref" \
+              --config "$config_file:${CONFIG_MEDIA_TYPE}" \
+              "$content_file:${CONTENT_MEDIA_TYPE}"
+
+            rm -f "$config_file" "$content_file"
+            echo "Pushed ${ref}"
+          done

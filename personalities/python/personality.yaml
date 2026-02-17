@@ -1,0 +1,5 @@
+description: Python developer personality -- data engineering, scripting, and automation
+image: gsoci.azurecr.io/giantswarm/klaus-python:latest
+plugins:
+  - repository: gsoci.azurecr.io/giantswarm/klaus-plugins/gs-base
+    tag: latest

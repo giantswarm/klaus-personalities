@@ -1,0 +1,14 @@
+version: 2.1
+
+orbs:
+  architect: giantswarm/architect@6.12.0
+
+workflows:
+  test:
+    jobs:
+      - architect/validate-changelog:
+          context: architect
+          name: validate-changelog
+          filters:
+            tags:
+              only: /^v.*/
