@@ -24,7 +24,7 @@ jobs:
       ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install ORAS
         uses: oras-project/setup-oras@v1
