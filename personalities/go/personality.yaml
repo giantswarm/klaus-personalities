@@ -1,0 +1,5 @@
+description: Go developer personality -- idiomatic Go, testing, and Giant Swarm coding standards
+image: gsoci.azurecr.io/giantswarm/klaus-go:latest
+plugins:
+  - repository: gsoci.azurecr.io/giantswarm/klaus-plugins/gs-base
+    tag: latest

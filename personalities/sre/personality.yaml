@@ -1,0 +1,9 @@
+description: Giant Swarm SRE personality -- platform operations, incident response, and infrastructure management
+image: gsoci.azurecr.io/giantswarm/klaus-go:latest
+plugins:
+  - repository: gsoci.azurecr.io/giantswarm/klaus-plugins/gs-base
+    tag: latest
+  - repository: gsoci.azurecr.io/giantswarm/klaus-plugins/gs-sre
+    tag: latest
+  - repository: gsoci.azurecr.io/giantswarm/klaus-plugins/kubernetes
+    tag: latest
