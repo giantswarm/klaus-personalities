@@ -6,6 +6,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_call:
+    inputs:
+      tag:
+        description: "Version tag to publish (for reusable workflow calls)."
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -19,10 +25,31 @@ jobs:
     name: Push Personality OCI Artifacts
     runs-on: ubuntu-latest
     env:
-      TAG: ${{ github.ref_name }}
       ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
       ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
     steps:
+      - name: Resolve publish tag
+        id: resolve-tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${INPUT_TAG:-}" ]]; then
+            tag="$INPUT_TAG"
+          else
+            tag="$REF_TAG"
+          fi
+
+          if [[ -z "${tag:-}" ]]; then
+            echo "No tag available for publishing."
+            exit 1
+          fi
+
+          echo "Using tag: ${tag}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
       - name: Checkout code
         uses: actions/checkout@v6
         with:
@@ -39,6 +66,8 @@ jobs:
             --password "$ACR_PASSWORD"
 
       - name: Push personalities
+        env:
+          TAG: ${{ steps.resolve-tag.outputs.tag }}
         run: |
           set -euo pipefail
 
