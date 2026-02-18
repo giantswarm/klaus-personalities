@@ -3,6 +3,109 @@ version: 2.1
 orbs:
   architect: giantswarm/architect@6.13.0
 
+jobs:
+  publish-personalities-oci:
+    docker:
+      - image: cimg/base:stable
+    environment:
+      REGISTRY: gsoci.azurecr.io
+      REGISTRY_PATH: giantswarm/klaus-personalities
+      ORAS_VERSION: 1.3.0
+    steps:
+      - checkout
+
+      - run:
+          name: Install ORAS
+          command: |
+            set -euo pipefail
+            curl -fsSL -o /tmp/oras.tar.gz "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+            tar -xzf /tmp/oras.tar.gz -C /tmp oras
+            mkdir -p "${HOME}/bin"
+            install /tmp/oras "${HOME}/bin/oras"
+            echo 'export PATH="${HOME}/bin:${PATH}"' >> "${BASH_ENV}"
+            source "${BASH_ENV}"
+            oras version
+
+      - run:
+          name: Resolve registry credentials from context
+          command: |
+            set -euo pipefail
+
+            username="${ACR_GSOCI_USERNAME:-${ACR_USERNAME:-}}"
+            password="${ACR_GSOCI_PASSWORD:-${ACR_PASSWORD:-}}"
+
+            if [ -z "${username}" ] || [ -z "${password}" ]; then
+              echo "Missing OCI registry credentials in context."
+              echo "Expected ACR_GSOCI_USERNAME/ACR_GSOCI_PASSWORD (or fallback ACR_USERNAME/ACR_PASSWORD)."
+              exit 1
+            fi
+
+            {
+              echo "export OCI_REGISTRY_USERNAME='${username}'"
+              echo "export OCI_REGISTRY_PASSWORD='${password}'"
+            } >> "${BASH_ENV}"
+
+      - run:
+          name: Login to OCI registry
+          command: |
+            set -euo pipefail
+            source "${BASH_ENV}"
+            printf '%s' "${OCI_REGISTRY_PASSWORD}" | oras login "${REGISTRY}" \
+              --username "${OCI_REGISTRY_USERNAME}" \
+              --password-stdin
+
+      - run:
+          name: Push personalities
+          command: |
+            set -euo pipefail
+            source "${BASH_ENV}"
+
+            tag="${CIRCLE_TAG:-}"
+            if [ -z "${tag}" ]; then
+              echo "CIRCLE_TAG is empty. This job must run on a tag."
+              exit 1
+            fi
+
+            config_media_type="application/vnd.giantswarm.klaus-personality.config.v1+json"
+            content_media_type="application/vnd.giantswarm.klaus-personality.content.v1.tar+gzip"
+
+            shopt -s nullglob
+            personality_dirs=(personalities/*/)
+            if [ "${#personality_dirs[@]}" -eq 0 ]; then
+              echo "No personality directories found under personalities/."
+              exit 1
+            fi
+
+            for dir in "${personality_dirs[@]}"; do
+              name="$(basename "${dir}")"
+              ref="${REGISTRY}/${REGISTRY_PATH}/${name}:${tag}"
+              personality_spec="${dir}personality.yaml"
+              description="$(awk -F': ' '/^description:/ {sub(/^description:[[:space:]]*/, "", $0); print; exit}' "${personality_spec}")"
+
+              echo "--- Packaging personality: ${name} ---"
+
+              config_file="$(mktemp)"
+              printf '{"name":"%s","version":"%s"}' "${name}" "${tag}" > "${config_file}"
+
+              content_file="$(mktemp --suffix=.tar.gz)"
+              tar -czf "${content_file}" -C "${dir}" .
+
+              echo "Pushing ${ref}"
+              oras push "${ref}" \
+                --disable-path-validation \
+                --annotation "io.giantswarm.klaus.type=personality" \
+                --annotation "io.giantswarm.klaus.name=${name}" \
+                --annotation "io.giantswarm.klaus.version=${tag}" \
+                --annotation "org.opencontainers.image.title=${name}" \
+                --annotation "org.opencontainers.image.version=${tag}" \
+                --annotation "org.opencontainers.image.description=${description}" \
+                --config "${config_file}:${config_media_type}" \
+                "${content_file}:${content_media_type}"
+
+              rm -f "${config_file}" "${content_file}"
+              echo "Pushed ${ref}"
+            done
+
 workflows:
   test:
     jobs:
@@ -12,3 +115,12 @@ workflows:
           filters:
             tags:
               only: /^v.*/
+  publish-personalities-on-tag:
+    jobs:
+      - publish-personalities-oci:
+          context: architect
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
