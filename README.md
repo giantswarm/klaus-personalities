@@ -9,7 +9,7 @@ A **personality** defines *who* the AI is and *what plugins it uses*. Each perso
 - `personality.yaml` -- plugin references and optional toolchain image
 - `SOUL.md` -- the identity document that shapes the AI's behavior, values, and communication style
 
-Personalities are packaged as OCI artifacts and pushed to the registry by CI on every release tag.
+Personalities are packaged as OCI artifacts and pushed to the registry by CI on every release tag. Release tags are created automatically when a PR is merged to `main`.
 
 ## Personalities
 
@@ -56,7 +56,7 @@ plugins:
 
 3. Write the `SOUL.md` identity document. This defines the AI's identity, values, approach, and communication style. See existing personalities for examples.
 
-4. Open a PR. CI will validate the structure. On release, all personalities are packaged and pushed to the registry.
+4. Open a PR. CI will validate the structure. After merge to `main`, auto-release creates the next patch tag and all personalities are packaged and pushed to the registry.
 
 ## Using a Personality
 

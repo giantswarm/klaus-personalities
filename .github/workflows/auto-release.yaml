@@ -11,6 +11,10 @@ permissions:
   contents: write  # Needed to create releases and tags
   pull-requests: read  # Needed to read PR information
 
+concurrency:
+  group: auto-release-main
+  cancel-in-progress: false
+
 jobs:
   auto_release:
     name: Auto Release
@@ -30,39 +34,60 @@ jobs:
           git config user.name "$GIT_ACTOR"
           git config user.email "${GIT_ACTOR}@users.noreply.github.com"
 
-      - name: Determine Next Version
-        id: version
+      - name: Create and push next tag
+        id: tag
         run: |
-          set -e
-          # Get the latest tag, defaulting to v0.0.0 if none exists
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null \
-            || echo "v0.0.0")
-          # Remove 'v' prefix
-          LATEST_VERSION=${LATEST_TAG#v}
-          # Split into major, minor, patch
-          IFS='.' read -r -a VERSION_PARTS <<< "$LATEST_VERSION"
-          # Increment patch version
-          NEXT_PATCH=$((VERSION_PARTS[2] + 1))
-          # Construct next version string
-          NEXT_VERSION="v${VERSION_PARTS[0]}.${VERSION_PARTS[1]}.$NEXT_PATCH"
-          echo "Latest tag: $LATEST_TAG"
-          echo "Next version: $NEXT_VERSION"
-          # Set output for subsequent steps
-          echo "next_version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
 
-      - name: Create Tag
-        env:
-          NEXT_VERSION: ${{ steps.version.outputs.next_version }}
-        run: |
-          git tag "$NEXT_VERSION"
-          git push origin "$NEXT_VERSION"
-          echo "Created and pushed tag $NEXT_VERSION"
+          get_latest_tag() {
+            git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | sed -n '1p'
+          }
+
+          for attempt in 1 2 3 4 5; do
+            latest_tag="$(get_latest_tag)"
+
+            if [[ -z "$latest_tag" ]]; then
+              latest_tag="v0.0.0"
+            fi
+
+            if [[ ! "$latest_tag" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+              echo "Invalid semver tag discovered: ${latest_tag}"
+              exit 1
+            fi
+
+            major="${BASH_REMATCH[1]}"
+            minor="${BASH_REMATCH[2]}"
+            patch="${BASH_REMATCH[3]}"
+            next_patch=$((patch + 1))
+            next_version="v${major}.${minor}.${next_patch}"
+
+            echo "Attempt ${attempt}: latest=${latest_tag}, next=${next_version}"
+
+            if git rev-parse "$next_version" >/dev/null 2>&1; then
+              echo "Tag ${next_version} already exists locally, retrying."
+              continue
+            fi
+
+            git tag "$next_version"
+            if git push origin "$next_version"; then
+              echo "tag=${next_version}" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            # Another workflow likely won the race; remove local tag and retry.
+            git tag -d "$next_version" >/dev/null 2>&1 || true
+            sleep 2
+          done
+
+          echo "Failed to create and push a unique release tag after retries."
+          exit 1
 
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.version.outputs.next_version }}
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
+          set -euo pipefail
           gh release create "$TAG" \
             --title "Release $TAG" \
             --generate-notes \
