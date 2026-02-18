@@ -13,4 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI workflow to package and push personality OCI artifacts on release.
 - Repository setup with devctl (branch protection, Renovate, workflows).
 
+### Changed
+
+- Hardened auto-release tagging flow with semver filtering, retry logic, and release concurrency control.
+- Added OCI manifest annotations to published personality artifacts for richer remote discovery in klausctl.
+
 [Unreleased]: https://github.com/giantswarm/klaus-personalities/tree/HEAD
