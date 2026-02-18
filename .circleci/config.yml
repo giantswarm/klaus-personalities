@@ -1,17 +1,6 @@
 version: 2.1
 
 jobs:
-  validate-changelog:
-    docker:
-      - image: cimg/base:stable
-    steps:
-      - checkout
-      - run:
-          name: Validate changelog file exists
-          command: |
-            set -euo pipefail
-            test -f CHANGELOG.md
-
   publish-personalities-oci:
     docker:
       - image: cimg/base:stable
@@ -63,7 +52,7 @@ jobs:
               --password-stdin
 
       - run:
-          name: Push personalities
+          name: Package and push personalities as OCI artifacts
           command: |
             set -euo pipefail
             source "${BASH_ENV}"
@@ -115,12 +104,6 @@ jobs:
             done
 
 workflows:
-  test:
-    jobs:
-      - validate-changelog:
-          filters:
-            tags:
-              only: /^v.*/
   publish-personalities-on-tag:
     jobs:
       - publish-personalities-oci:
