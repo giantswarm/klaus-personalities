@@ -61,6 +61,7 @@ jobs:
 
             echo "Pushing ${ref}"
             oras push "$ref" \
+              --disable-path-validation \
               --annotation "io.giantswarm.klaus.type=personality" \
               --annotation "io.giantswarm.klaus.name=${name}" \
               --annotation "io.giantswarm.klaus.version=${TAG}" \
