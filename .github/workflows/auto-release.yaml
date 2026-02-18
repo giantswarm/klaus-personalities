@@ -20,8 +20,6 @@ jobs:
     name: Auto Release
     if: github.event.pull_request.merged
     runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -94,11 +92,3 @@ jobs:
             --title "Release $TAG" \
             --generate-notes \
             --verify-tag
-
-  push_personalities:
-    name: Push Personality OCI Artifacts
-    needs: auto_release
-    uses: ./.github/workflows/push-personalities.yaml
-    with:
-      tag: ${{ needs.auto_release.outputs.tag }}
-    secrets: inherit
