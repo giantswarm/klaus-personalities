@@ -1,9 +1,17 @@
 version: 2.1
 
-orbs:
-  architect: giantswarm/architect@6.13.0
-
 jobs:
+  validate-changelog:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - run:
+          name: Validate changelog file exists
+          command: |
+            set -euo pipefail
+            test -f CHANGELOG.md
+
   publish-personalities-oci:
     docker:
       - image: cimg/base:stable
@@ -109,9 +117,7 @@ jobs:
 workflows:
   test:
     jobs:
-      - architect/validate-changelog:
-          context: architect
-          name: validate-changelog
+      - validate-changelog:
           filters:
             tags:
               only: /^v.*/
