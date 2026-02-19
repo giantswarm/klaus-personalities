@@ -1,0 +1,9 @@
+description: Program manager personality -- coordinates AI agent teams, assigns work, tracks progress, and ensures quality across multiple repositories
+image: gsoci.azurecr.io/giantswarm/klaus-go:latest
+plugins:
+  - repository: gsoci.azurecr.io/giantswarm/klaus-plugins/gs-base
+    tag: latest
+  - repository: gsoci.azurecr.io/giantswarm/klaus-plugins/gs-godev
+    tag: latest
+  - repository: gsoci.azurecr.io/giantswarm/klaus-plugins/gs-product
+    tag: latest
