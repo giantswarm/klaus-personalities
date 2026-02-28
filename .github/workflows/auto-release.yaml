@@ -1,0 +1,70 @@
+---
+# yamllint disable rule:truthy
+name: Auto Release
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+permissions:
+  contents: write  # Needed to create releases and tags
+  pull-requests: read  # Needed to read PR information
+
+concurrency:
+  group: auto-release-main
+  cancel-in-progress: false
+
+jobs:
+  auto_release:
+    name: Auto Release
+    if: github.event.pull_request.merged
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        env:
+          GIT_ACTOR: ${{ github.actor }}
+        run: |
+          git config user.name "$GIT_ACTOR"
+          git config user.email "${GIT_ACTOR}@users.noreply.github.com"
+
+      - name: Detect changed personalities and create releases
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CHANGED=$(git diff --name-only HEAD~1...HEAD \
+            | grep '^personalities/' | cut -d/ -f2 | sort -u)
+
+          if [ -z "$CHANGED" ]; then
+            echo "No personality directories changed, skipping release"
+            exit 0
+          fi
+
+          for name in $CHANGED; do
+            if [ ! -d "personalities/${name}" ]; then
+              echo "Skipping ${name}: directory no longer exists"
+              continue
+            fi
+
+            LATEST=$(git tag -l "${name}/v*" --sort=-v:refname | head -1)
+
+            if [ -z "$LATEST" ]; then
+              NEXT="${name}/v0.1.0"
+            else
+              VERSION="${LATEST#${name}/v}"
+              IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+              NEXT="${name}/v${MAJOR}.${MINOR}.$((PATCH + 1))"
+            fi
+
+            echo "Creating tag $NEXT for personality ${name}"
+            git tag "$NEXT"
+            git push origin "$NEXT"
+            sleep 2
+
+            gh release create "$NEXT" --title "$NEXT" --generate-notes
+          done
