@@ -1,0 +1,132 @@
+---
+name: Receive upstream release dispatch
+
+on:
+  repository_dispatch:
+    types:
+      - plugin-release
+      - toolchain-release
+
+permissions: {}
+
+jobs:
+  update-version:
+    name: Update version reference
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Validate payload and determine parameters
+        id: params
+        env:
+          EVENT_TYPE: ${{ github.event.action }}
+          COMPONENT: ${{ github.event.client_payload.component }}
+          VERSION: ${{ github.event.client_payload.version }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${COMPONENT}" ] || [ -z "${VERSION}" ]; then
+            echo "::error::Missing required client_payload fields: component and version"
+            exit 1
+          fi
+
+          # Validate component name contains only safe characters
+          COMPONENT_RE='^[a-zA-Z0-9][a-zA-Z0-9/_.-]+$'
+          if ! [[ "${COMPONENT}" =~ ${COMPONENT_RE} ]]; then
+            echo "::error::Component '${COMPONENT}' contains invalid characters"
+            exit 1
+          fi
+
+          # Validate version matches semver (with optional v prefix)
+          SEMVER_RE='^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
+          if ! [[ "${VERSION}" =~ ${SEMVER_RE} ]]; then
+            echo "::error::Version '${VERSION}' does not match semver pattern"
+            exit 1
+          fi
+
+          echo "Received ${EVENT_TYPE}: component=${COMPONENT} version=${VERSION}"
+
+          BRANCH="chore/update-${COMPONENT//\//-}-${VERSION}"
+          echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "component=${COMPONENT}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "event_type=${EVENT_TYPE}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Update personality manifests
+        id: update
+        env:
+          EVENT_TYPE: ${{ steps.params.outputs.event_type }}
+          COMPONENT: ${{ steps.params.outputs.component }}
+          VERSION: ${{ steps.params.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          updated=0
+
+          for manifest in personalities/*/personality.yaml; do
+            if [ "${EVENT_TYPE}" = "toolchain-release" ]; then
+              # Match only indented toolchain repository lines (not top-level metadata)
+              if grep -Fq "  repository:" "$manifest" && grep -F "  repository:" "$manifest" | grep -Fq "${COMPONENT}"; then
+                sed -i "\|repository:.*${COMPONENT}|{ n; s/tag:.*/tag: ${VERSION}/ }" "$manifest"
+                echo "Updated toolchain in ${manifest}"
+                updated=1
+              fi
+            elif [ "${EVENT_TYPE}" = "plugin-release" ]; then
+              # Match only indented plugin repository lines
+              if grep -Fq "  repository:" "$manifest" && grep -F "  repository:" "$manifest" | grep -Fq "${COMPONENT}"; then
+                sed -i "\|repository:.*${COMPONENT}|{ n; s/tag:.*/tag: ${VERSION}/ }" "$manifest"
+                echo "Updated plugin in ${manifest}"
+                updated=1
+              fi
+            fi
+          done
+
+          if [ "${updated}" -eq 0 ]; then
+            echo "No manifests reference component '${COMPONENT}', nothing to update"
+          fi
+
+          echo "updated=${updated}" >> "$GITHUB_OUTPUT"
+
+      - name: Create pull request
+        if: steps.update.outputs.updated == '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ steps.params.outputs.branch }}
+          COMPONENT: ${{ steps.params.outputs.component }}
+          VERSION: ${{ steps.params.outputs.version }}
+          EVENT_TYPE: ${{ steps.params.outputs.event_type }}
+        run: |
+          set -euo pipefail
+
+          # Check if any files were modified
+          if git diff --quiet; then
+            echo "No changes detected, skipping PR creation"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout -b "${BRANCH}"
+          git add personalities/
+          git commit -m "chore: update ${COMPONENT} to ${VERSION}"
+          git push origin "${BRANCH}"
+
+          KIND="plugin"
+          if [ "${EVENT_TYPE}" = "toolchain-release" ]; then
+            KIND="toolchain"
+          fi
+
+          gh pr create \
+            --title "chore: update ${KIND} ${COMPONENT} to ${VERSION}" \
+            --body "Automated version bump triggered by upstream ${KIND} release dispatch.
+
+          **Component:** \`${COMPONENT}\`
+          **Version:** \`${VERSION}\`
+          **Trigger:** \`${EVENT_TYPE}\`" \
+            --base main

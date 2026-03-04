@@ -15,5 +15,40 @@
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v(?<version>.*)$",
     },
+    // Detect toolchain OCI image references in personality manifests.
+    // Matches YAML like:
+    //   toolchain:
+    //     repository: gsoci.azurecr.io/giantswarm/klaus-toolchains/go
+    //     tag: v0.1.2
+    {
+      "customType": "regex",
+      "fileMatch": ["^personalities/.+/personality\\.yaml$"],
+      "matchStrings": [
+        "toolchain:\\s*\\n\\s+repository:\\s*(?<registryUrl>[^/]+)/(?<depName>[^\\s]+)\\s*\\n\\s+tag:\\s*(?<currentValue>v?\\S+)",
+      ],
+      "datasourceTemplate": "docker",
+    },
+    // Detect plugin OCI image references in personality manifests.
+    // Matches YAML like:
+    //   plugins:
+    //     - repository: gsoci.azurecr.io/giantswarm/klaus-plugins/foo
+    //       tag: v1.0.0
+    {
+      "customType": "regex",
+      "fileMatch": ["^personalities/.+/personality\\.yaml$"],
+      "matchStrings": [
+        "-\\s+repository:\\s*(?<registryUrl>[^/]+)/(?<depName>[^\\s]+)\\s*\\n\\s+tag:\\s*(?<currentValue>v?\\S+)",
+      ],
+      "datasourceTemplate": "docker",
+    },
+  ],
+  "packageRules": [
+    // Automerge minor and patch updates for toolchains and plugins
+    {
+      "matchFileNames": ["personalities/*/personality.yaml"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "automergeType": "pr",
+    },
   ],
 }
