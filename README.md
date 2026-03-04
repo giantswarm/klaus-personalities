@@ -50,10 +50,10 @@ keywords:
   - giantswarm
 toolchain:
   repository: gsoci.azurecr.io/giantswarm/klaus-toolchains/go
-  tag: latest
+  tag: v0.1.2
 plugins:
   - repository: gsoci.azurecr.io/giantswarm/klaus-plugins/gs-base
-    tag: latest
+    tag: v0.1.0
   - repository: gsoci.azurecr.io/giantswarm/klaus-plugins/my-plugin
     tag: v1.0.0
 ```
