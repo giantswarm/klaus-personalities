@@ -7,7 +7,7 @@ set -euo pipefail
 # Tag builds:    single job for the personality matching the tag prefix.
 # Branch builds: no-op (personalities are only published on tags).
 
-KLAUSCTL_VERSION="0.0.82"
+KLAUSCTL_VERSION="0.0.81"
 
 emit_tag_job() {
   local name="$1"
@@ -56,6 +56,30 @@ jobs:
             printf '{"auths":{"%s":{"auth":"%s"}}}' "${REGISTRY}" "${auth}" > "${HOME}/.docker/config.json"
 
       - run:
+          name: Install cosign and crane
+          command: |
+            set -euo pipefail
+            COSIGN_VERSION="v2.5.0"
+            CRANE_VERSION="v0.20.5"
+            mkdir -p "${HOME}/bin"
+            curl -fsSL -o /tmp/cosign "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+            install /tmp/cosign "${HOME}/bin/cosign"
+            curl -fsSL -o /tmp/go-containerregistry.tgz "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz"
+            tar -xzf /tmp/go-containerregistry.tgz -C /tmp crane
+            install /tmp/crane "${HOME}/bin/crane"
+            echo 'export PATH="${HOME}/bin:${PATH}"' >> "${BASH_ENV}"
+            source "${BASH_ENV}"
+            cosign version
+            crane version
+
+      - run:
+          name: Mint Sigstore OIDC token
+          command: |
+            set -euo pipefail
+            SIGSTORE_ID_TOKEN=$(circleci run oidc get --claims '{"aud": "sigstore"}' --root-issuer)
+            echo "export SIGSTORE_ID_TOKEN=\"$SIGSTORE_ID_TOKEN\"" >> "$BASH_ENV"
+
+      - run:
           name: Push personality @@NAME@@
           command: |
             set -euo pipefail
@@ -65,6 +89,34 @@ jobs:
             ref="${REGISTRY}/${REGISTRY_PATH}/@@NAME@@:${tag}"
             echo "Pushing personality: @@NAME@@ -> ${ref}"
             klausctl personality push "personalities/@@NAME@@" "${ref}"
+
+      - run:
+          name: Sign and verify personality @@NAME@@ with cosign
+          command: |
+            set -euo pipefail
+            source "${BASH_ENV}"
+
+            tag="${CIRCLE_TAG#@@NAME@@/}"
+            ref="${REGISTRY}/${REGISTRY_PATH}/@@NAME@@:${tag}"
+
+            # Resolve to immutable digest before signing, mirroring the architect-orb
+            # cosign step. Signing a tag would lose the binding if the tag is ever
+            # repushed; signing a digest is permanent.
+            digest=$(crane digest "${ref}")
+            if [ -z "${digest}" ]; then
+              echo "Could not resolve digest for ${ref}"
+              exit 1
+            fi
+            echo "Signing ${ref}@${digest}"
+
+            cosign sign --yes "${ref}@${digest}"
+
+            echo "Verifying signature"
+            cosign verify \
+              --certificate-oidc-issuer-regexp '^https://oidc\.circleci\.com' \
+              --certificate-identity-regexp '^https://circleci\.com/api/v2/projects/[a-f0-9-]+/pipeline-definitions/[a-f0-9-]+$' \
+              "${ref}@${digest}" > /dev/null
+            echo "OK: ${ref}@${digest}"
 
 workflows:
   publish-personality:
