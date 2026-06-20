@@ -1,4 +1,5 @@
 {
+  reviewers: ['teemow'],
   extends: [
     'github>giantswarm/renovate-presets:default.json5',
   ],
