@@ -7,7 +7,7 @@ set -euo pipefail
 # Tag builds:    single job for the personality matching the tag prefix.
 # Branch builds: no-op (personalities are only published on tags).
 
-KLAUSCTL_VERSION="0.2.25"
+KLAUSCTL_VERSION="0.2.26"
 
 emit_tag_job() {
   local name="$1"
