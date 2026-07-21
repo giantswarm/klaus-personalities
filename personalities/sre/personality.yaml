@@ -12,5 +12,5 @@ keywords:
   - platform
 toolchain:
   repository: gsoci.azurecr.io/giantswarm/klaus-toolchains/go
-  tag: 0.1.12
+  tag: 0.1.26
 plugins: []
