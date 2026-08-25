@@ -29,7 +29,7 @@ jobs:
           name: Install klausctl
           command: |
             set -euo pipefail
-            curl -fsSL -o /tmp/klausctl.tar.gz "https://github.com/giantswarm/klausctl/releases/download/v${KLAUSCTL_VERSION}/klausctl_Linux_x86_64.tar.gz"
+            curl -fsSL --retry 10 --retry-delay 15 --retry-all-errors -o /tmp/klausctl.tar.gz "https://github.com/giantswarm/klausctl/releases/download/v${KLAUSCTL_VERSION}/klausctl_Linux_x86_64.tar.gz"
             tar -xzf /tmp/klausctl.tar.gz -C /tmp --strip-components=1 klausctl_Linux_x86_64/klausctl
             mkdir -p "${HOME}/bin"
             install /tmp/klausctl "${HOME}/bin/klausctl"
@@ -62,9 +62,9 @@ jobs:
             COSIGN_VERSION="v2.5.0"
             CRANE_VERSION="v0.20.5"
             mkdir -p "${HOME}/bin"
-            curl -fsSL -o /tmp/cosign "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+            curl -fsSL --retry 10 --retry-delay 15 --retry-all-errors -o /tmp/cosign "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
             install /tmp/cosign "${HOME}/bin/cosign"
-            curl -fsSL -o /tmp/go-containerregistry.tgz "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz"
+            curl -fsSL --retry 10 --retry-delay 15 --retry-all-errors -o /tmp/go-containerregistry.tgz "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz"
             tar -xzf /tmp/go-containerregistry.tgz -C /tmp crane
             install /tmp/crane "${HOME}/bin/crane"
             echo 'export PATH="${HOME}/bin:${PATH}"' >> "${BASH_ENV}"
